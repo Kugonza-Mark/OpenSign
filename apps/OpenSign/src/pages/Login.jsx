@@ -1,14 +1,13 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import Parse from "parse";
 import { useDispatch } from "react-redux";
 import axios from "axios";
+import Title from "../components/Title";
 import { NavLink, useNavigate, useLocation } from "react-router";
 import login_img from "../assets/images/login_img.svg";
 import { useWindowSize } from "../hook/useWindowSize";
 import ModalUi from "../primitives/ModalUi";
-import {
-  emailRegex,
-} from "../constant/const";
+import { emailRegex } from "../constant/const";
 import Alert from "../primitives/Alert";
 import { appInfo } from "../constant/appinfo";
 import { fetchAppInfo } from "../redux/reducers/infoReducer";
@@ -23,8 +22,7 @@ import { useTranslation } from "react-i18next";
 import SelectLanguage from "../components/pdf/SelectLanguage";
 
 function Login() {
-  const appName =
-    "OpenSign™";
+  const appName = "OpenSign™";
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
@@ -32,12 +30,13 @@ function Login() {
   const { width } = useWindowSize();
   const [state, setState] = useState({
     email: "",
+    otp: "",
     password: "",
     alertType: "success",
     alertMsg: "",
     passwordVisible: false,
     loading: false,
-    thirdpartyLoader: false,
+    thirdpartyLoader: false
   });
   const [userDetails, setUserDetails] = useState({
     Company: "",
@@ -46,15 +45,14 @@ function Login() {
   const [isModal, setIsModal] = useState(false);
   const [image, setImage] = useState();
   const [errMsg, setErrMsg] = useState();
+  const [userLocalDetails, setUserLocalDetails] = useState();
+  const [showOTP, setShowOTP] = useState(false);
+  const [errorMsg, seterrorMsg] = useState();
+
   useEffect(() => {
-    handleUserExist();
+    checkUserExt();
     // eslint-disable-next-line
   }, []);
-
-  const handleUserExist = async () => {
-      checkUserExt();
-  };
-
 
   const setLocalVar = (user) => {
     localStorage.setItem("accesstoken", user.sessionToken);
@@ -71,14 +69,11 @@ function Login() {
     setState({ ...state, loading: false, alertType: type, alertMsg: msg });
     setTimeout(() => setState({ ...state, alertMsg: "" }), 2000);
   };
-
   const checkUserExt = async () => {
     const app = await getAppLogo();
     if (app?.error === "invalid_json") {
       setErrMsg(t("server-down", { appName: appName }));
-    } else if (
-      app?.user === "not_exist"
-    ) {
+    } else if (app?.user === "not_exist") {
       navigate("/addadmin");
     }
     if (app?.logo) {
@@ -86,11 +81,11 @@ function Login() {
     } else {
       setImage(appInfo?.applogo || undefined);
     }
-    dispatch(fetchAppInfo());
     if (localStorage.getItem("accesstoken")) {
       setState({ ...state, loading: true });
       GetLoginData();
     }
+    dispatch(fetchAppInfo());
   };
   const handleChange = (event) => {
     let { name, value } = event.target;
@@ -100,15 +95,20 @@ function Login() {
     setState({ ...state, [name]: value });
   };
 
-  const handleLogin = async (
-  ) => {
-    const email = state?.email
-    const password = state?.password
+  const handleSubmit = async (event) => {
+    localStorage.removeItem("accesstoken");
+    event.preventDefault();
 
+    if (!emailRegex.test(state.email)) {
+      alert("Please enter a valid email address.");
+      return;
+    }
+
+    const { email, password } = state;
     if (!email || !password) {
       return;
     }
-    localStorage.removeItem("accesstoken");
+
     try {
       setState({ ...state, loading: true });
       localStorage.setItem("appLogo", appInfo.applogo);
@@ -119,29 +119,20 @@ function Login() {
       }
       // Get extended user data (including 2FA status) using cloud function
       try {
-        await Parse.User.become(_user.sessionToken);
-        setLocalVar(_user);
-        await continueLoginFlow();
+        setState({ ...state, loading: false });
+        setUserLocalDetails(_user);
+        setShowOTP(true);
+        // await Parse.User.become(_user.sessionToken);
+        // setLocalVar(_user);
+        //  await continueLoginFlow();
       } catch (error) {
         console.error("Error checking 2FA status:", error);
         showToast("danger", t("something-went-wrong-mssg"));
       }
     } catch (error) {
       console.error("Error while logging in user", error);
-      if (error?.code === 1001) {
-        showToast("danger", t("action-prohibited"));
-      } else {
-        showToast("danger", t("invalid-username-password-region"));
-      }
+      showToast("danger", "Invalid username/password or region");
     }
-  };
-  const handleLoginBtn = async (event) => {
-    event.preventDefault();
-    if (!emailRegex.test(state.email)) {
-      alert(t("valid-email-alert"));
-      return;
-    }
-    await handleLogin();
   };
 
   const setThirdpartyLoader = (value) => {
@@ -195,7 +186,7 @@ function Login() {
               localStorage.setItem("PageLanding", menu.pageId);
               localStorage.setItem("defaultmenuid", menu.menuId);
               localStorage.setItem("pageType", menu.pageType);
-                navigate(redirectUrl);
+              navigate(redirectUrl);
             } else {
               showToast("danger", t("role-not-found"));
               logOutUser();
@@ -255,7 +246,7 @@ function Login() {
             localStorage.setItem("PageLanding", menu.pageId);
             localStorage.setItem("defaultmenuid", menu.menuId);
             localStorage.setItem("pageType", menu.pageType);
-              navigate(redirectUrl);
+            navigate(redirectUrl);
           } else {
             setState({ ...state, loading: false });
             logOutUser();
@@ -286,6 +277,7 @@ function Login() {
       const userInformation = JSON.parse(
         localStorage.getItem("UserInformation")
       );
+      // console.log("payload ", payload);
       if (payload && payload.sessionToken) {
         const params = {
           userDetails: {
@@ -299,6 +291,7 @@ function Login() {
           }
         };
         const userSignUp = await Parse.Cloud.run("usersignup", params);
+        // console.log("userSignUp ", userSignUp);
         if (userSignUp && userSignUp.sessionToken) {
           const LocalUserDetails = {
             name: userInformation.name,
@@ -307,6 +300,7 @@ function Login() {
             company: userDetails.Company,
             jobTitle: userDetails.JobTitle
           };
+
           localStorage.setItem("userDetails", JSON.stringify(LocalUserDetails));
           thirdpartyLoginfn(userSignUp.sessionToken);
         } else {
@@ -336,7 +330,6 @@ function Login() {
     let PageLanding = localStorage.getItem("PageLanding");
     let baseUrl = localStorage.getItem("baseUrl");
     let appid = localStorage.getItem("parseAppId");
-    let favicon = localStorage.getItem("favicon");
 
     localStorage.clear();
     saveLanguageInLocal(i18n);
@@ -347,7 +340,45 @@ function Login() {
     localStorage.setItem("userSettings", appdata);
     localStorage.setItem("baseUrl", baseUrl);
     localStorage.setItem("parseAppId", appid);
-    localStorage.setItem("favicon", favicon);
+  };
+
+  const handleVerifyOTP = async (data) => {
+    try {
+      setState({ ...state, loading: true });
+  
+      const response = await axios.post(
+        "https://alpha.ucu.ac.ug/alpha-api/auth/verifyOTPToken",
+        data,
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+  
+      console.log("Status code:", response.status);
+      console.log("Response data:", response.data);
+  
+      if (response.data.success) {
+        seterrorMsg(null);
+  
+        // Assuming _user is available and valid here
+        const _user= userLocalDetails;
+        await Parse.User.become(_user.sessionToken);
+        setLocalVar(_user);
+        await continueLoginFlow();
+      }
+    } catch (error) {
+      if (error.response) {
+        seterrorMsg(error.response.data.message);
+        console.log("Error code:", error.response.status);
+        console.log("Error data:", error.response.data);
+      } else {
+        console.error("Network error:", error.message);
+      }
+    } finally {
+      setState({ ...state, loading: false });
+    }
   };
 
   const continueLoginFlow = async () => {
@@ -387,8 +418,8 @@ function Login() {
             localStorage.setItem("PageLanding", menu.pageId);
             localStorage.setItem("defaultmenuid", menu.menuId);
             localStorage.setItem("pageType", menu.pageType);
-              setState({ ...state, loading: false });
-              navigate(redirectUrl);
+            setState({ ...state, loading: false });
+            navigate(redirectUrl);
           } else {
             setState({ ...state, loading: false });
             setIsModal(true);
@@ -398,8 +429,8 @@ function Login() {
           logOutUser();
         }
       } else {
-          showToast("danger", t("user-not-found"));
-          logOutUser();
+        showToast("danger", t("user-not-found"));
+        logOutUser();
       }
     } catch (error) {
       console.error("Error during login flow", error);
@@ -412,7 +443,8 @@ function Login() {
       {errMsg}
     </div>
   ) : (
-    <>
+    <div>
+      <Title title="Login" />
       {state.loading && (
         <div
           aria-live="assertive"
@@ -428,6 +460,7 @@ function Login() {
             role="region"
             className="pb-1 md:pb-4 pt-10 md:px-10 lg:px-16 h-full"
           >
+            
             <div className="md:p-4 lg:p-10 p-4 bg-base-100 text-base-content op-card">
               <div className="w-[250px] h-[66px] inline-block overflow-hidden">
                 {image && (
@@ -438,84 +471,150 @@ function Login() {
                   />
                 )}
               </div>
+              
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-2">
+            
                 <div>
-                  <form onSubmit={handleLoginBtn} aria-label="Login Form">
-                    <h1 className="text-[30px] mt-6">{t("welcome")}</h1>
+              
+                    
+                     
+                  <form onSubmit={handleSubmit} aria-label="Login Form">
+                    <h1 className="text-[30px] mt-6">Alpha Open Sign</h1>
                     <fieldset>
                       <legend className="text-[12px] text-[#878787]">
                         {t("Login-to-your-account")}
                       </legend>
+                      {state.alertMsg && (
+                        <Alert type={state.alertType}>{state.alertMsg}</Alert>
+                      )}
                       <div className="w-full px-6 py-3 my-1 op-card bg-base-100 shadow-md outline outline-1 outline-slate-300/50">
                         <label className="block text-xs" htmlFor="email">
-                          {t("email")}
+                          {!showOTP ? "Email" : "Enter OTP"}
+                         { errorMsg  && <div style={{ position:"relative", 
+                            borderRadius:"5px",
+                            padding:10,
+                              background:"rgb(251, 151, 158)"}}>
+                            {errorMsg}
+                             
+                              </div>}
                         </label>
-                        <input
-                          id="email"
-                          type="email"
-                          className="op-input op-input-bordered op-input-sm focus:outline-none hover:border-base-content w-full text-xs"
-                          name="email"
-                          autoComplete="username"
-                          value={state.email}
-                          onChange={handleChange}
-                          required
-                          onInvalid={(e) =>
-                            e.target.setCustomValidity(t("input-required"))
-                          }
-                          onInput={(e) => e.target.setCustomValidity("")}
-                        />
-                        <hr className="my-1 border-none" />
-                            <label className="block text-xs" htmlFor="password">
-                              {t("password")}
-                            </label>
-                            <div className="relative">
-                              <input
-                                id="password"
-                                type={
-                                  state.passwordVisible ? "text" : "password"
-                                }
-                                className="op-input op-input-bordered op-input-sm focus:outline-none hover:border-base-content w-full text-xs"
-                                name="password"
-                                value={state.password}
-                                autoComplete="current-password"
-                                onChange={handleChange}
-                                onInvalid={(e) =>
-                                  e.target.setCustomValidity(
-                                    t("input-required")
-                                  )
-                                }
-                                onInput={(e) => e.target.setCustomValidity("")}
-                                required
-                              />
-                              <span
-                                className="absolute cursor-pointer top-[50%] right-[10px] -translate-y-[50%] text-base-content"
-                                onClick={togglePasswordVisibility}
-                              >
-                                {state.passwordVisible ? (
-                                  <i className="fa-light fa-eye-slash text-xs pb-1" /> // Close eye icon
-                                ) : (
-                                  <i className="fa-light fa-eye text-xs pb-1 " /> // Open eye icon
-                                )}
-                              </span>
-                            </div>
+                  
+                      
+                      
+                        {!showOTP ? (
+                          <input
+                            id="email"
+                            type="email"
+                            className="op-input op-input-bordered op-input-sm focus:outline-none hover:border-base-content w-full text-xs"
+                            name="email"
+                            autoComplete="username"
+                            value={state.email}
+                            onChange={handleChange}
+                            required
+                            onInvalid={(e) =>
+                              e.target.setCustomValidity(t("input-required"))
+                            }
+                            onInput={(e) => e.target.setCustomValidity("")}
+                          />
+                        ) : (
+                          <input
+                            id="otp"
+                            type="text"
+                            inputMode="numeric" // Suggest numeric keypad on mobile
+                            pattern="[0-9]*" // Enforce numeric characters
+                            className="op-input op-input-bordered op-input-sm focus:outline-none hover:border-base-content w-full text-xs"
+                            name="otp"
+                            autoComplete="one-time-code" // Prevent autofill, but still support OTP autofill on mobile
+                            value={state.otp}
+                            onChange={(e) => {
+                              // Allow only digits
+                              const value = e.target.value.replace(/\D/g, "");
+                              handleChange({ target: { name: "otp", value } });
+                            }}
+                            required
+                            onInvalid={(e) =>
+                              e.target.setCustomValidity(t("input-required"))
+                            }
+                            onInput={(e) => e.target.setCustomValidity("")}
+                          />
+                        )}
+                        {!showOTP ? <hr className="my-1 border-none" /> : null}
+                        {!showOTP ? (
+                          <label className="block text-xs" htmlFor="password">
+                            {t("password")}
+                          </label>
+                        ) : null}
+                        
+                           
+                        {!showOTP ? (
+                          <div className="relative">
+                            <input
+                              id="password"
+                              type={state.passwordVisible ? "text" : "password"}
+                              className="op-input op-input-bordered op-input-sm focus:outline-none hover:border-base-content w-full text-xs"
+                              name="password"
+                              value={state.password}
+                              autoComplete="current-password"
+                              onChange={handleChange}
+                              onInvalid={(e) =>
+                                e.target.setCustomValidity(t("input-required"))
+                              }
+                              onInput={(e) => e.target.setCustomValidity("")}
+                              required
+                            />
+                            <span
+                              className="absolute cursor-pointer top-[50%] right-[10px] -translate-y-[50%] text-base-content"
+                              onClick={togglePasswordVisibility}
+                            >
+                              {state.passwordVisible ? (
+                                <i className="fa-light fa-eye-slash text-xs pb-1" /> // Close eye icon
+                              ) : (
+                                <i className="fa-light fa-eye text-xs pb-1 " /> // Open eye icon
+                              )}
+                            </span>
+                          </div>
+                        ) : null}
+                        {!showOTP ? (
                           <div className="relative mt-1">
                             <NavLink
                               to="/forgetpassword"
                               className="text-[13px] op-link op-link-primary underline-offset-1 focus:outline-none ml-1"
                             >
-                              {t("forgot-password")}?
+                              {t("forgot-password")}
                             </NavLink>
                           </div>
+                        ) : null}
                       </div>
                     </fieldset>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-center text-xs font-bold mt-2">
-                      <button
-                        type="submit"
-                        className="op-btn op-btn-primary"
-                        disabled={state.loading}
-                      >
-                        {state.loading ? t("loading") : t("login")}
-                      </button>
+                      {!showOTP ? (
+                        <button
+                          type="submit"
+                          className="op-btn op-btn-primary"
+                          disabled={state.loading}
+                        >
+                          {state.loading ? t("loading") : t("login")}
+                        </button>
+                      ) : (
+                        <button
+                          // type="submit"
+                          onClick={() => {
+                            // alert(JSON.stringify(userLocalDetails))
+                            const { otp } = state;
+                            // alert(otp)
+                            const data = {
+                              otpCode: otp,
+                              usernameOrEmail: userLocalDetails.email
+                            };
+
+                            handleVerifyOTP(data);
+                          }}
+                          className="op-btn op-btn-primary"
+                          disabled={state.loading}
+                        >
+                          {state.loading ? t("loading") : "Verify OTP"}
+                        </button>
+                      )}
                     </div>
                   </form>
                 </div>
@@ -533,9 +632,6 @@ function Login() {
               </div>
             </div>
             <SelectLanguage />
-            {state.alertMsg && (
-              <Alert type={state.alertType}>{state.alertMsg}</Alert>
-            )}
           </div>
           <ModalUi
             isOpen={isModal}
@@ -547,7 +643,7 @@ function Login() {
                 <label
                   htmlFor="Company"
                   style={{ display: "flex" }}
-                  className="block text-xs font-semibold"
+                  className="block text-xs text-gray-700 font-semibold"
                 >
                   {t("company")}{" "}
                   <span className="text-[red] text-[13px]">*</span>
@@ -574,7 +670,7 @@ function Login() {
                 <label
                   htmlFor="JobTitle"
                   style={{ display: "flex" }}
-                  className="block text-xs font-semibold"
+                  className="block text-xs text-gray-700 font-semibold"
                 >
                   {t("job-title")}
                   <span className="text-[red] text-[13px]">*</span>
@@ -598,16 +694,26 @@ function Login() {
                 />
               </div>
               <div className="mt-4 gap-2 flex flex-row">
+                {!showOTP ? (
+                  <button
+                    type="button"
+                    className="op-btn op-btn-primary"
+                    onClick={(e) => handleSubmitbtn(e)}
+                  >
+                    Login Here
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="op-btn op-btn-primary"
+                    onClick={(e) => handleSubmitbtn(e)}
+                  >
+                    Verify OTP
+                  </button>
+                )}
                 <button
                   type="button"
-                  className="op-btn op-btn-primary"
-                  onClick={(e) => handleSubmitbtn(e)}
-                >
-                  {t("login")}
-                </button>
-                <button
-                  type="button"
-                  className="op-btn op-btn-ghost text-base-content"
+                  className="op-btn op-btn-ghost"
                   onClick={logOutUser}
                 >
                   {t("cancel")}
@@ -624,7 +730,7 @@ function Login() {
           <Loader />
         </div>
       )}
-    </>
+    </div>
   );
 }
 export default Login;
