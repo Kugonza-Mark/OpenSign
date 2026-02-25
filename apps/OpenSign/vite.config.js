@@ -33,6 +33,13 @@ export default defineConfig(({ mode }) => {
       }
     },
     server: {
+        proxy: {
+      "/api/app": {
+        target: "http://localhost:5001/app",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/app/, ""),
+      },
+    },
       port: env.PORT || 3000, // Same port as CRA
       open: true
     },

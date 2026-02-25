@@ -13,8 +13,10 @@ import "./i18n";
 const appId =
   import.meta.env.VITE_APPID || process.env.REACT_APP_APPID || "opensign";
 const serverUrl = serverUrl_fn();
-Parse.initialize(appId);
-Parse.serverURL = serverUrl;
+// Parse.initialize(appId);
+Parse.initialize("opensign"); // 
+// Parse.serverURL = serverUrl;
+Parse.serverURL ="http://localhost:5001/app";
 
 if (localStorage.getItem("showUpgradeProgress")) {
   showUpgradeProgress();
