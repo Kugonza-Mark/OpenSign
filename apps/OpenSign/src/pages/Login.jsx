@@ -63,6 +63,14 @@ function Login() {
     } else {
       localStorage.setItem("profileImg", "");
     }
+
+      const timeout = setTimeout(() => {
+    localStorage.removeItem("accesstoken");
+    // redirect to login page
+    window.location.href = "/";
+  }, 30 * 60 * 1000);
+
+  return () => clearTimeout(timeout);
   };
 
   const showToast = (type, msg) => {
